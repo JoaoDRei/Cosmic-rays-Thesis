@@ -8,18 +8,35 @@ BASE_DIR = Path(__file__).resolve().parent
 outdir = BASE_DIR / "output"
 outdir.mkdir(exist_ok=True)
 
+#git add .
+#git commit -m "Describe what changed"
+#git push
+
 #B-field model selection
-B_MODEL = "straightGrad" # options: "const", "straightGrad", "hourglass", "finiteBottle"
+B_MODEL = "TwistTanh" # options: "const", "straightGrad", "hourglass", "finiteBottle",  "TwistTanh"
 
 # ----------------------------
 # Particle class
 # ----------------------------
 class Particle:
     def __init__(self):
-        self.x = [0.0, 0.0, 0.0]
-        self.v = [0.0, 0.0, 0.0]
+        self.x = np.zeros(3)
+        self.v = np.zeros(3)
         self.q = -1.602e-19   # electron charge
         self.m = 9.109e-31    # electron mass
+    
+    def pitch_angle(self, B):
+        B_mag = np.linalg.norm(B) #Magnitude of B using Euclidian norm
+        v_mag = np.linalg.norm(self.v) #Magnitude of velocity using Euclidian norm
+        v_par = np.dot(self.v, B) / B_mag #Paralell velocity component
+        return np.arccos(v_par / v_mag) #pitch angle
+
+    def magnetic_moment(self, B):
+        B_mag = np.linalg.norm(B)
+        v_mag = np.linalg.norm(self.v)
+        v_par = np.dot(self.v, B) / B_mag
+        v_perp_sq = v_mag**2 - v_par**2
+        return self.m * v_perp_sq / (2 * B_mag) #magnetic moment using the formula mu = m * v_perp^2 / (2 * B)
 
 
 # ----------------------------
@@ -37,6 +54,8 @@ def EvalB(pos):
         return MirrorHourglassB(pos)
     elif B_MODEL == "finiteBottle":
         return MirrorFiniteBottle(pos)
+    elif B_MODEL == "TwistTanh":
+        return TwistTanh(pos)
     else:
         raise ValueError("Unknown B-field model")
 
@@ -57,11 +76,17 @@ def MirrorFiniteBottle(pos):
     L = 10.0
     return np.array([0.0, 0.0, B0 * (1 + np.tanh(pos[2]/L)**2)])
 
+def TwistTanh(pos):
+    B0 = 1.0
+    By0 = 1
+    Bz0 = 1.0
+    L = 1
+    return np.array([0, By0 , Bz0* np.tanh(pos[1]/L)])
 
 #----------------------------
 # Save magnetic field snapshot for plotting. Just the z-y plane is saved
 #----------------------------
-def SaveMagneticFieldSnapshot():
+def SaveMagneticFieldSnapshot(x_plane):
     z_vals = np.linspace(-2.0, 2.0, 80)
     y_vals = np.linspace(-2.0, 2.0, 80)
 
@@ -70,7 +95,7 @@ def SaveMagneticFieldSnapshot():
 
         for z in z_vals:
             for y in y_vals:
-                B = EvalB([0.0, y, z])   # x = 0 plane
+                B = EvalB([x_plane, y, z])   # x = 0 plane
                 f.write(f"{z:g} {y:g} {B[0]:g} {B[1]:g} {B[2]:g}\n")
 
 
@@ -164,7 +189,7 @@ def UpdateVelocityBoris(part, E, B, dt):
 # ----------------------------
 # Sample particle
 # ----------------------------
-def SampleParticle():
+def SampleParticleLr():
     part = Particle() #initiates a particle with zero position and velocity, and the charge and mass of an electron
 
     part.v[1] = 0.1 # sets the y-component of the velocity to 100,000 m/s
@@ -176,6 +201,17 @@ def SampleParticle():
     print(f"Larmor radius is {rL:g}")
     return part
 
+def SampleParticle2():
+    part = Particle() #initiates a particle with zero position and velocity, and the charge and mass of an electron
+
+    part.v[1] = 0.1 # sets the y-component of the velocity to 100,000 m/s
+    part.v[2] = 1e4 # sets the z-component of the velocity to 10,000 m/s, which means that the particle has a small velocity component along the magnetic field direction (z-axis) in addition to its larger velocity component perpendicular to the magnetic field (y-axis). This setup allows us to observe both the gyration around the magnetic field lines and the motion along the field lines.
+    B = EvalB(part.x)  # evaluates the magnetic field at the particle's position
+    #rL = part.m * part.v[1] / (abs(part.q) * B[2]) # calculates the Larmor radius
+    #part.x[0] = rL # sets the x-component of the position to the Larmor radius, which means that the particle starts at a distance from the origin equal to the Larmor radius along the x-axis. This is a common choice for initializing a particle in a magnetic field, as it allows us to observe the circular motion of the particle around the magnetic field lines.
+
+    #print(f"Larmor radius is {rL:g}")
+    return part
 
 # ----------------------------
 # Main program
@@ -185,30 +221,44 @@ def main():
     it_max = 1000 # sets the time step (dt) to 3e-11 seconds and the maximum number of iterations (it_max) to 1000. This means that the simulation will run for a total time of it_max * dt = 3e-8 seconds, which should be sufficient to observe several gyrations of the particle around the magnetic field lines, given the initial velocity and magnetic field strength.
 
     with open(outdir / "trace.txt", "w") as f: # opens a file named "trace.txt" in write mode. This file will be used to store the output of the simulation, including the time step, time, position, and velocity of the particle at each recorded step.
-        f.write("it time x y z u v w\n")
+        f.write("it time x y z u v w pitch mu\n")
 
+        # initializes a particle with specific initial conditions.
+        part = SampleParticle2()  #SampleParticleLr(), SampleParticle2() 
 
-        part = SampleParticle() # initializes a particle with specific initial conditions, including a velocity of 100,000 m/s in the y-direction and a position that corresponds to the Larmor radius in the x-direction. This setup allows us to observe the particle's motion in the presence of the magnetic field.
-        SaveMagneticFieldSnapshot()
+        #Magnetic Field Snapshot at particle's initial x plane
+        SaveMagneticFieldSnapshot(part.x[0]) 
+
         # Evaluates the electric and magnetic fields at the particle's position and pushes the velocity back by half step
         E = EvalE(part.x)
         B = EvalB(part.x)
+
+
         UpdateVelocity(part, E, B, -0.5*dt)
 
         start_time = time.time()
 
         for it in range(it_max):
+            # fields at current position
             E = EvalE(part.x)
             B = EvalB(part.x)
 
+            # advance particle
             UpdateVelocity(part, E, B, dt)
             PushParticle(part, dt)
 
-            if it % 2 == 0: # records the particle's state every 2 iterations (every 6e-11 seconds) by writing the current iteration number, time, position, and velocity to the "trace.txt" file. This allows us to track the particle's trajectory and velocity over time, which can be useful for analyzing its motion in the magnetic field.
+            # diagnostics at new state
+            B = EvalB(part.x)
+            pitch = part.pitch_angle(B)
+            mu = part.magnetic_moment(B)    
+
+            SAVE_EVERY = 2
+            if it % SAVE_EVERY == 0: # records the particle's state every SAVE_EVERY iterations (every SAVE_EVERY*3e-11 seconds) by writing the current iteration number, time, position, and velocity to the "trace.txt" file. This allows us to track the particle's trajectory and velocity over time, which can be useful for analyzing its motion in the magnetic field.
                 f.write(
                     f"{it} {it*dt:g} "
                     f"{part.x[0]:g} {part.x[1]:g} {part.x[2]:g} "
-                    f"{part.v[0]:g} {part.v[1]:g} {part.v[2]:g} \n"
+                    f"{part.v[0]:g} {part.v[1]:g} {part.v[2]:g} "
+                    f"{pitch:g} {mu:g}\n"
                 )
 
         end_time = time.time()
