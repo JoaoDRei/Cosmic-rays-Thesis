@@ -24,8 +24,8 @@ diagnostics_file = outdir / "diagnostics.txt"
 # --------------------------------
 df = pd.read_csv(trace_file, sep=r"\s+")
 dfB = pd.read_csv(Bfile, sep=r"\s+")
-df_diag = pd.read_csv(diagnostics_file, sep=r"\s+")
-
+df_diag = pd.read_csv(diagnostics_file, sep=r"\s+"
+                      )
 # number of grid points (must match simulation snapshot)
 NZ = len(np.unique(dfB["z"]))
 NY = len(np.unique(dfB["y"]))
@@ -46,7 +46,7 @@ Bmag = np.sqrt(Bz**2 + By**2)
 
 
 # --------------------------------
-# Trace: 2D gyro-orbit (x-y plane)
+# 2D gyro-orbit (x-y plane)
 # --------------------------------
 plt.figure()
 plt.plot(df["x"], df["y"])
@@ -61,7 +61,7 @@ plt.savefig(xy_path, dpi=300, bbox_inches="tight")
 plt.close()
 
 # --------------------------------
-# Trace:2D orbit (z-y plane)
+# 2D orbit (z-y plane)
 # --------------------------------
 plt.figure()
 plt.plot(df["z"], df["y"])
@@ -75,7 +75,7 @@ plt.savefig(zy_path, dpi=300, bbox_inches="tight")
 plt.close()
 
 # --------------------------------
-# Trace:Magnetic field lines (y-z plane) quiver plot
+# Magnetic field lines (y-z plane) quiver plot
 # --------------------------------
 
 skip = 4  # take every 4th point
@@ -100,7 +100,7 @@ plt.close()
 
 
 # --------------------------------
-# Trace:3D trajectory
+# 3D trajectory
 # --------------------------------
 fig = plt.figure(figsize=(20, 6), constrained_layout=True)
 
@@ -125,28 +125,14 @@ plt.close()
 
 
 # --------------------------------
-# Diagnostics: pitch angle, magnetic moment, Larmor radius, curvature radius
+# Pitch angle & magnetic moment diagnostics
 # --------------------------------
-
-# constants (same as simulation)
-q = 1.602e-19
-m = 9.109e-31
 
 time = df["time"].values
+pitch = df["pitch"].values
+mu = df["mu"].values
 
-pos = df[["x","y","z"]].values
-vel = df[["u","v","w"]].values
-Btraj = df[["Bx","By","Bz"]].values
-pitch = df_diag["pitch"].values
-mu = df_diag["mu"].values
-rL= df_diag["rL"].values
-Rc = df_diag["Rc"].values
-
-
-# --------------------------------
-# statistics for pitch angle and magnetic moment
-# --------------------------------
-
+# ---------- statistics ----------
 def summarize(name, arr):
     mean = np.mean(arr)
     std = np.std(arr)
@@ -163,34 +149,31 @@ def summarize(name, arr):
 summarize("Pitch angle", pitch)
 summarize("Magnetic moment", mu)
 
-# --------------------------------
-# time series plots: pitch angle and magnetic moment
-# --------------------------------
-
+# ---------- pitch angle time series ----------
 plt.figure()
 plt.plot(time, pitch)
 plt.xlabel("time [s]")
 plt.ylabel("pitch angle [rad]")
 plt.title("Pitch angle vs time")
 plt.grid(True)
+
 pitch_path = outdir / "pitch_timeseries.png"
 plt.savefig(pitch_path, dpi=300, bbox_inches="tight")
 plt.close()
 
+# ---------- magnetic moment time series ----------
 plt.figure()
 plt.plot(time, mu)
 plt.xlabel("time [s]")
 plt.ylabel("magnetic moment")
 plt.title("Magnetic moment vs time")
 plt.grid(True)
+
 mu_path = outdir / "mu_timeseries.png"
 plt.savefig(mu_path, dpi=300, bbox_inches="tight")
 plt.close()
 
-# --------------------------------
-# conservation error
-# --------------------------------
-
+# ---------- normalized variation (very standard diagnostic) ----------
 pitch_rel = (pitch - pitch[0]) / pitch[0]
 mu_rel = (mu - mu[0]) / mu[0]
 
@@ -200,6 +183,7 @@ plt.xlabel("time [s]")
 plt.ylabel("relative change")
 plt.title("Pitch angle conservation error")
 plt.grid(True)
+
 pitch_err_path = outdir / "pitch_relative_error.png"
 plt.savefig(pitch_err_path, dpi=300, bbox_inches="tight")
 plt.close()
@@ -210,39 +194,10 @@ plt.xlabel("time [s]")
 plt.ylabel("relative change")
 plt.title("Magnetic moment conservation error")
 plt.grid(True)
+
 mu_err_path = outdir / "mu_relative_error.png"
 plt.savefig(mu_err_path, dpi=300, bbox_inches="tight")
 plt.close()
-
-# --------------------------------
-# curvature vs Larmor radius comparison
-# --------------------------------
-
-plt.figure()
-plt.plot(time, rL, label="Larmor radius")
-plt.plot(time, Rc, label="Curvature radius")
-plt.xlabel("time [s]")
-plt.ylabel("length [m]")
-plt.title("Larmor radius vs magnetic curvature radius")
-plt.legend()
-plt.grid(True)
-curv_compare_path = outdir / "rho_vs_curvature.png"
-plt.savefig(curv_compare_path, dpi=300, bbox_inches="tight")
-plt.close()
-
-# ratio diagnostic 
-ratio = rL / Rc
-
-plt.figure()
-plt.plot(time, ratio)
-plt.xlabel("time [s]")
-plt.ylabel("rho_L / Rc")
-plt.title("Adiabatic validity parameter")
-plt.grid(True)
-ratio_path = outdir / "rho_over_Rc.png"
-plt.savefig(ratio_path, dpi=300, bbox_inches="tight")
-plt.close()
-
 
 
 
