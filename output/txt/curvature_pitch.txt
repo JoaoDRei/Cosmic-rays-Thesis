@@ -1,0 +1,2 @@
+timeindex minRadius equatorialPitch deltaMuOverMu
+116 1.80144e+11 0.407228 0

@@ -37,17 +37,20 @@ class Particle:
         v_perp_sq = v_mag**2 - v_par**2
         return self.m * v_perp_sq / (2 * B_mag) #magnetic moment using the formula mu = m * v_perp^2 / (2 * B)
 
-
+    def larmor_radius(self,B):
+        B_mag = np.linalg.norm(B)
+        v_mag= np.linalg.norm(self.v)
+        v_par = np.dot(self.v, B) / B_mag #parallel velocity component
+        v_perp = np.sqrt(v_mag**2 - v_par**2) #perpendicular velocity component using the relation v^2 = v_par^2 + v_perp^2
+        return self.m * v_perp / (abs(self.q) * B_mag) #Larmor radius using the formula rL = m * v_perp / (|q| * B)
 # ----------------------------
 # Field evaluators
 # ----------------------------
 def EvalE(pos):
     return [0.0, 0.0, 0.0] #will be kept at zero
-
 def EvalB(pos):
-    return B_MODEL_FUNC(pos)
-    
-
+    return B_MODEL_FUNC(pos)   
+#Defining the different types of Magnetic Field:
 def ConstantzB(pos):
     return [0.0, 0.0, 0.01]
 def MirrorStraightGradB(pos):
@@ -58,12 +61,10 @@ def MirrorHourglassB(pos):
     B0 = 1.0
     L = 10.0
     return np.array([B0*(-pos[0]/L), B0*(-pos[1]/L), B0 * (1 + (pos[2]/L)**2)])
-
 def MirrorFiniteBottle(pos):
     B0 = 1.0
     L = 10.0
     return np.array([0.0, 0.0, B0 * (1 + np.tanh(pos[2]/L)**2)])
-
 def TwistTanh(pos):
     B0 = 1.0
     By0 = 1
@@ -79,7 +80,7 @@ FIELD_MODELS = {
     "finiteBottle": MirrorFiniteBottle,
     "TwistTanh": TwistTanh,
 }
-B_MODEL_NAME = "TwistTanh"
+B_MODEL_NAME = "TwistTan"
 B_MODEL_FUNC = FIELD_MODELS[B_MODEL_NAME]
 
 
@@ -99,10 +100,6 @@ def B_model(pos):
 """
 
     (BASE_DIR / "bmodel_file.py").write_text(code)
-
-
-
-
 #----------------------------
 # Save magnetic field snapshot for plotting. Just the z-y plane is saved
 #----------------------------
@@ -117,9 +114,6 @@ def SaveMagneticFieldSnapshot(x_plane):
             for y in y_vals:
                 B = EvalB([x_plane, y, z])   # x = 0 plane
                 f.write(f"{z:g} {y:g} {B[0]:g} {B[1]:g} {B[2]:g}\n")
-
-
-
 # ----------------------------
 # Vector utilities
 # ----------------------------
@@ -129,53 +123,37 @@ def CrossProduct(v1, v2):
         -v1[0]*v2[2] + v1[2]*v2[0],
         v1[0]*v2[1] - v1[1]*v2[0]
     ]
-
-
 def Determinant(a):
     return (
         a[0][0]*(a[1][1]*a[2][2] - a[1][2]*a[2][1])
         - a[0][1]*(a[1][0]*a[2][2] - a[1][2]*a[2][0])
         + a[0][2]*(a[1][0]*a[2][1] - a[1][1]*a[2][0])
     )
-
-
 def MatrixVectMult(a, x):
     return [
         a[0][0]*x[0] + a[0][1]*x[1] + a[0][2]*x[2],
         a[1][0]*x[0] + a[1][1]*x[1] + a[1][2]*x[2],
         a[2][0]*x[0] + a[2][1]*x[1] + a[2][2]*x[2],
     ]
-
-
 def VectVectAdd(a, b):
     return [a[i] + b[i] for i in range(3)]
-
-
 # ----------------------------
 # Particle pusher: updates position based on velocity
 # ----------------------------
 def PushParticle(part, dt):
     for i in range(3):
         part.x[i] += part.v[i] * dt
-
-
 # ----------------------------
 # Velocity update methods
 # ----------------------------
 def UpdateVelocity(part, E, B, dt):
     # Choose method here
     UpdateVelocityBoris(part, E, B, dt)
-    # UpdateVelocityForward(part, E, B, dt)
-    # UpdateVelocityTajimaExplicit(part, E, B, dt)
-    # UpdateVelocityTajimaImplicit(part, E, B, dt)
-
 
 def UpdateVelocityForward(part, E, B, dt):
     vxB = CrossProduct(part.v, B)
     for i in range(3):
         part.v[i] += (part.q/part.m) * (E[i] + vxB[i]) * dt
-
-
 def UpdateVelocityBoris(part, E, B, dt):
     #defining intermediate velocities: v-, v', v+, where v' is the velocity after the half electric field acceleration, and v+ is the velocity after the magnetic rotation
     v_minus = [0.0]*3 
@@ -204,10 +182,8 @@ def UpdateVelocityBoris(part, E, B, dt):
     # final velocity
     for i in range(3):
         part.v[i] = v_plus[i] + (part.q/part.m) * E[i] * 0.5 * dt #the final velocity. in this case, since the electric field is zero, the final velocity is just v+.
-
-
 # ----------------------------
-# Sample particle
+# Sample particles
 # ----------------------------
 def SampleParticleLr():
     part = Particle() #initiates a particle with zero position and velocity, and the charge and mass of an electron
@@ -215,24 +191,25 @@ def SampleParticleLr():
     part.v[1] = 0.1 # sets the y-component of the velocity to 100,000 m/s
     part.v[2] = 1e4 # sets the z-component of the velocity to 10,000 m/s, which means that the particle has a small velocity component along the magnetic field direction (z-axis) in addition to its larger velocity component perpendicular to the magnetic field (y-axis). This setup allows us to observe both the gyration around the magnetic field lines and the motion along the field lines.
     B = EvalB(part.x)  # evaluates the magnetic field at the particle's position
-    rL = part.m * part.v[1] / (abs(part.q) * B[2]) # calculates the Larmor radius
+    rL= part.larmor_radius(B)
+    #rL2 = part.m * part.v[1] / (abs(part.q) * B[2]) # calculates the Larmor radius
     part.x[0] = rL # sets the x-component of the position to the Larmor radius, which means that the particle starts at a distance from the origin equal to the Larmor radius along the x-axis. This is a common choice for initializing a particle in a magnetic field, as it allows us to observe the circular motion of the particle around the magnetic field lines.
 
     print(f"Larmor radius is {rL:g}")
+    #print(f"Original Larmor radius is {rL2:g}")
     return part
-
 def SampleParticle2():
     part = Particle() #initiates a particle with zero position and velocity, and the charge and mass of an electron
     part.x[1]=0.1
     part.v[1] = 0.1 # sets the y-component of the velocity to 0.1 m/s
     part.v[2] = 1e4 # sets the z-component of the velocity to 10,000 m/s, which means that the particle has a small velocity component along the magnetic field direction (z-axis) in addition to its larger velocity component perpendicular to the magnetic field (y-axis). This setup allows us to observe both the gyration around the magnetic field lines and the motion along the field lines.
     B = EvalB(part.x)  # evaluates the magnetic field at the particle's position
-    rL = part.m * part.v[1] / (abs(part.q) * B[2]) # calculates the Larmor radius
+    #rL = part.m * part.v[1] / (abs(part.q) * B[2]) # calculates the Larmor radius
+    rL=part.larmor_radius(B)
     part.x[0] = rL # sets the x-component of the position to the Larmor radius, which means that the particle starts at a distance from the origin equal to the Larmor radius along the x-axis. This is a common choice for initializing a particle in a magnetic field, as it allows us to observe the circular motion of the particle around the magnetic field lines.
 
     #print(f"Larmor radius is {rL:g}")
     return part
-
 # ----------------------------
 # Main program
 # ----------------------------
@@ -284,7 +261,5 @@ def main():
         end_time = time.time()
 
     print(f"Finished after {it_max} time steps in {end_time - start_time:g} seconds")
-
-
 if __name__ == "__main__":
     main()
